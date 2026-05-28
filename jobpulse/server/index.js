@@ -16,11 +16,18 @@ const { aggregateAll } = require("./services/aggregator");
 
 const jobRoutes = require("./routes/jobs");
 const applicationRoutes = require("./routes/applications");
+const authRoutes = require("./routes/auth");
+const metaRoutes = require("./routes/meta");
 
 const app = express();
 
 // Middleware — runs on every request
-app.use(cors()); // Allow cross-origin requests from the frontend
+app.use(
+  cors({
+    origin: "http://localhost:5173", // exact origin of your Vite dev server
+    credentials: true, // allow cookies / auth headers
+  }),
+);
 app.use(express.json()); // Parse incoming JSON request bodies
 
 // ── In-memory cache ──────────────────────────────────────────────────────────
@@ -49,21 +56,10 @@ app.post("/admin/aggregate", async (req, res) => {
 });
 
 // ── Routes ───────────────────────────────────────────────────────────────────
-app.get("/", (req, res) => {
-  res.json({ message: "JobPulse server is running" });
-});
-
 app.use("/jobs", jobRoutes);
 app.use("/applications", applicationRoutes);
-
-app.post("/admin/aggregate", async (req, res) => {
-  try {
-    const result = await aggregateAll(cache);
-    res.json({ success: true, ...result });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
+app.use("/auth", authRoutes);
+app.use("/meta", metaRoutes);
 
 // Connect to MongoDB, then start the server, then fetch jobs ────────────────────────
 const PORT = process.env.PORT || 5000;

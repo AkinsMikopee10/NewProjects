@@ -126,4 +126,36 @@ router.get("/:id", async (req, res) => {
   }
 });
 
+// PATCH /jobs/:id/view  — atomically increment view counter
+router.patch("/:id/view", async (req, res) => {
+  try {
+    const job = await Job.findByIdAndUpdate(
+      req.params.id,
+      { $inc: { views: 1 } },
+      { new: true },
+    ).lean();
+    if (!job) return res.status(404).json({ error: "Job not found" });
+    res.json({ views: job.views });
+  } catch (err) {
+    console.error("[PATCH /jobs/:id/view]", err.message);
+    res.status(500).json({ error: "Failed to increment view" });
+  }
+});
+
+// PATCH /jobs/:id/apply  — atomically increment apply counter
+router.patch("/:id/apply", async (req, res) => {
+  try {
+    const job = await Job.findByIdAndUpdate(
+      req.params.id,
+      { $inc: { applies: 1 } },
+      { new: true },
+    ).lean();
+    if (!job) return res.status(404).json({ error: "Job not found" });
+    res.json({ applies: job.applies });
+  } catch (err) {
+    console.error("[PATCH /jobs/:id/apply]", err.message);
+    res.status(500).json({ error: "Failed to increment apply count" });
+  }
+});
+
 module.exports = router;

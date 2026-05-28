@@ -1,3 +1,78 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  body {
+    background-color: #0a0f1e;
+    color: #ffffff;
+    font-family: "Plus Jakarta Sans", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+/* Job description prose styles */
+.job-description p {
+  margin-bottom: 0.75rem;
+}
+.job-description ul {
+  list-style: disc;
+  padding-left: 1.25rem;
+  margin-bottom: 0.75rem;
+}
+.job-description ol {
+  list-style: decimal;
+  padding-left: 1.25rem;
+  margin-bottom: 0.75rem;
+}
+.job-description li {
+  margin-bottom: 0.25rem;
+}
+.job-description h1,
+.job-description h2,
+.job-description h3 {
+  color: rgba(255, 255, 255, 0.85);
+  font-weight: 600;
+  margin: 1rem 0 0.5rem;
+}
+.job-description h1 {
+  font-size: 1rem;
+}
+.job-description h2 {
+  font-size: 0.9375rem;
+}
+.job-description h3 {
+  font-size: 0.875rem;
+}
+.job-description a {
+  color: #6c63ff;
+  text-decoration: underline;
+}
+.job-description a:hover {
+  color: #8b85ff;
+}
+.job-description strong {
+  color: rgba(255, 255, 255, 0.85);
+  font-weight: 600;
+}
+.job-description br {
+  display: block;
+  content: "";
+  margin-bottom: 0.25rem;
+}
+
+/* Toast animation */
+@keyframes slide-up {
+  from {
+    transform: translate(-50%, 1rem);
+    opacity: 0;
+  }
+  to {
+    transform: translate(-50%, 0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-up {
+  animation: slide-up 0.2s ease-out both;
+}

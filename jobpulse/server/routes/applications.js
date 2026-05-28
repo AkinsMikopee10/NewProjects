@@ -1,6 +1,18 @@
 const express = require("express");
 const router = express.Router();
+const jwt = require("jsonwebtoken");
 const Application = require("../models/Application");
+
+function requireAuth(req, res, next) {
+  const token = req.headers.authorization?.split(" ")[1];
+  if (!token) return res.status(401).json({ error: "Unauthorized" });
+  try {
+    req.user = jwt.verify(token, process.env.JWT_SECRET);
+    next();
+  } catch {
+    res.status(401).json({ error: "Invalid token" });
+  }
+}
 
 // ─── GET /applications ────────────────────────────────────────────────────────
 // Returns all applications for the logged-in user.
@@ -8,16 +20,12 @@ const Application = require("../models/Application");
 
 router.get("/", async (req, res) => {
   try {
-    // TODO Day 8: replace hardcoded userId with req.user._id from auth middleware
-    const userId = req.query.userId;
-    if (!userId) return res.status(400).json({ error: "userId required" });
-
-    const filter = { userId };
+    const filter = { userId: req.user.userId };
     if (req.query.status) filter.status = req.query.status;
 
     const applications = await Application.find(filter)
       .populate("jobId") // fetch the full job document, not just the ID
-      .sort({ dateApplied: -1 })
+      .sort({ updatedAt: -1 })
       .lean();
 
     res.json(applications);
@@ -32,21 +40,39 @@ router.get("/", async (req, res) => {
 // Idempotent — calling it twice with the same userId + jobId
 // returns the existing record rather than creating a duplicate.
 
-router.post("/", async (req, res) => {
+router.post("/", requireAuth, async (req, res) => {
   try {
-    const { userId, jobId, status = "saved" } = req.body;
-    if (!userId || !jobId) {
-      return res.status(400).json({ error: "userId and jobId are required" });
+    const { jobId, status = "saved" } = req.body;
+    if (!jobId) {
+      return res.status(400).json({ error: "jobId required" });
     }
 
     // Check if application already exists before creating
-    const existing = await Application.findOne({ userId, jobId });
+    const existing = await Application.findOne({
+      userId: req.user.userId,
+      jobId,
+    });
     if (existing) {
-      return res.json(existing); // return the existing one, don't duplicate
+      // Already exists — update status if the new one is a progression
+      const updated = await Application.findByIdAndUpdate(
+        existing._id,
+        { $set: { status } },
+        { new: true },
+      )
+        .populate("jobId")
+        .lean();
+      return res.json(updated);
     }
 
-    const application = await Application.create({ userId, jobId, status });
-    res.status(201).json(application);
+    const application = await Application.create({
+      userId: req.user.userId,
+      jobId,
+      status,
+    });
+    const populated = await Application.findById(application._id)
+      .populate("jobId")
+      .lean();
+    res.status(201).json(populated);
   } catch (err) {
     console.error("[POST /applications]", err.message);
     res.status(500).json({ error: "Failed to create application" });
@@ -57,7 +83,7 @@ router.post("/", async (req, res) => {
 // Updates the status or notes on an application.
 // Used by the tracker status dropdown and inline notes on Day 17.
 
-router.patch("/:id", async (req, res) => {
+router.patch("/:id", requireAuth, async (req, res) => {
   try {
     const { status, notes } = req.body;
     const update = {};
@@ -66,10 +92,12 @@ router.patch("/:id", async (req, res) => {
     if (notes !== undefined) update.notes = notes;
 
     const application = await Application.findByIdAndUpdate(
-      req.params.id,
+      { _id: req.params.id, userId: req.user.userId },
       { $set: update },
       { new: true }, // return the updated document, not the old one
-    ).lean();
+    )
+      .populate("jobId")
+      .lean();
 
     if (!application) {
       return res.status(404).json({ error: "Application not found" });
@@ -79,6 +107,21 @@ router.patch("/:id", async (req, res) => {
   } catch (err) {
     console.error("[PATCH /applications/:id]", err.message);
     res.status(500).json({ error: "Failed to update application" });
+  }
+});
+
+// DELETE /applications/:id
+router.delete("/:id", requireAuth, async (req, res) => {
+  try {
+    const deleted = await Application.findOneAndDelete({
+      _id: req.params.id,
+      userId: req.user.userId,
+    });
+    if (!deleted) return res.status(404).json({ error: "Not found" });
+    res.json({ deleted: true });
+  } catch (err) {
+    console.error("[DELETE /applications/:id]", err.message);
+    res.status(500).json({ error: "Failed to delete application" });
   }
 });
 
