@@ -18,7 +18,7 @@ function requireAuth(req, res, next) {
 // Returns all applications for the logged-in user.
 // ?status=saved|applied|interview|rejected   filter by status
 
-router.get("/", async (req, res) => {
+router.get("/", requireAuth, async (req, res) => {
   try {
     const filter = { userId: req.user.userId };
     if (req.query.status) filter.status = req.query.status;
@@ -91,7 +91,7 @@ router.patch("/:id", requireAuth, async (req, res) => {
     if (status) update.status = status;
     if (notes !== undefined) update.notes = notes;
 
-    const application = await Application.findByIdAndUpdate(
+    const application = await Application.findOneAndUpdate(
       { _id: req.params.id, userId: req.user.userId },
       { $set: update },
       { new: true }, // return the updated document, not the old one

@@ -3,8 +3,7 @@ import { AuthProvider } from "./context/AuthContext";
 import { ApplicationsProvider } from "./context/ApplicationsContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Login from "./pages/Login";
-import RemoteDashboard from "./pages/Dashboard";
-import ContractDashboard from "./pages/Dashboard";
+import RemoteDashboard, { ContractDashboard } from "./pages/Dashboard";
 import Tracker from "./pages/Tracker";
 
 export default function App() {

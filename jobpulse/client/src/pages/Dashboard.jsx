@@ -1,63 +1,56 @@
-import { useState, useRef } from "react";
-import { useApplications } from "../context/ApplicationsContext";
-import BottomNav from "../components/BottomNav";
-import DesktopNav from "../components/DesktopNav";
+import { useState, useRef, useEffect } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { useJobFeed } from "../hooks/useJobFeed";
+import JobCard from "../components/JobCard";
+import JobDetailDrawer from "../components/JobDetailDrawer";
+import BottomNav from "../components/BottomNav";
 
-const COLUMNS = [
-  {
-    status: "saved",
-    label: "Saved",
-    color: "#6c63ff",
-    bg: "rgba(108,99,255,0.08)",
-  },
-  {
-    status: "applied",
-    label: "Applied",
-    color: "#3b82f6",
-    bg: "rgba(59,130,246,0.08)",
-  },
-  {
-    status: "interview",
-    label: "Interview",
-    color: "#f59e0b",
-    bg: "rgba(245,158,11,0.08)",
-  },
-  {
-    status: "rejected",
-    label: "Rejected",
-    color: "#ef4444",
-    bg: "rgba(239,68,68,0.08)",
-  },
+const POPULAR_TAGS = [
+  "React",
+  "Node.js",
+  "Python",
+  "TypeScript",
+  "Go",
+  "AWS",
+  "DevOps",
+  "Figma",
+  "Vue",
+  "Django",
 ];
 
-const STATUS_ORDER = ["saved", "applied", "interview", "rejected"];
-
-function timeAgo(date) {
-  const s = Math.floor((Date.now() - new Date(date)) / 1000);
-  if (s < 60) return "just now";
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  const d = Math.floor(h / 24);
-  if (d < 7) return `${d}d ago`;
-  return new Date(date).toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-  });
-}
-
-function colFor(status) {
-  return COLUMNS.find((c) => c.status === status) || COLUMNS[0];
-}
-
-function EmptyColumn({ label }) {
+function JobSkeleton() {
   return (
-    <div className="flex flex-col items-center justify-center py-10 text-center">
-      <div className="w-10 h-10 rounded-xl bg-white/[0.03] border border-white/5 flex items-center justify-center mb-3">
+    <div className="bg-white/5 border border-white/8 rounded-2xl p-5 animate-pulse">
+      <div className="flex items-center gap-2 mb-3">
+        <div className="h-4 w-16 bg-white/10 rounded-full" />
+        <div className="h-3 w-10 bg-white/5 rounded-full" />
+      </div>
+      <div className="h-5 w-3/4 bg-white/10 rounded-lg mb-2" />
+      <div className="h-4 w-1/2 bg-white/5 rounded-lg mb-4" />
+      <div className="flex gap-2 mb-4">
+        {[60, 48, 52, 44].map((w, i) => (
+          <div
+            key={i}
+            className="h-5 bg-white/5 rounded-lg"
+            style={{ width: w }}
+          />
+        ))}
+      </div>
+      <div className="flex gap-2">
+        <div className="h-8 w-16 bg-white/5 rounded-xl" />
+        <div className="h-8 w-16 bg-white/5 rounded-xl" />
+      </div>
+    </div>
+  );
+}
+
+function ErrorState({ onRetry }) {
+  return (
+    <div className="col-span-full flex flex-col items-center justify-center py-20 text-center">
+      <div className="w-14 h-14 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center mb-4">
         <svg
-          className="w-4 h-4 text-white/20"
+          className="w-6 h-6 text-red-400"
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -66,416 +59,93 @@ function EmptyColumn({ label }) {
           <path
             strokeLinecap="round"
             strokeLinejoin="round"
-            d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"
+            d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"
           />
         </svg>
       </div>
-      <p className="text-white/25 text-xs">No {label.toLowerCase()} jobs</p>
+      <p className="text-white/60 text-sm mb-4">
+        Couldn't load jobs. Check your connection.
+      </p>
+      <button
+        onClick={onRetry}
+        className="px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-white/60 hover:text-white hover:border-white/20 text-sm transition-all"
+      >
+        Try again
+      </button>
     </div>
   );
 }
 
-function NotesModal({ application, onSave, onClose }) {
-  const [notes, setNotes] = useState(application.notes || "");
-  const [saving, setSaving] = useState(false);
-
-  async function handleSave() {
-    setSaving(true);
-    await onSave(application._id, notes);
-    setSaving(false);
-    onClose();
-  }
-
+function EmptyState({ search, onClear }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        onClick={onClose}
-      />
-      <div className="relative w-full max-w-md bg-[#0d1326] border border-white/10 rounded-2xl p-5 shadow-2xl">
-        <div className="flex items-start justify-between mb-4">
-          <div>
-            <h3 className="font-display font-bold text-white text-base leading-snug">
-              {application.jobId?.title ?? "Job"}
-            </h3>
-            <p className="text-white/40 text-xs mt-0.5">
-              {application.jobId?.company}
-            </p>
-          </div>
-          <button
-            onClick={onClose}
-            className="w-7 h-7 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center text-white/40 hover:text-white transition-all ml-3 flex-shrink-0"
-          >
-            <svg
-              className="w-3.5 h-3.5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
-          </button>
-        </div>
-        <textarea
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          placeholder="Add notes — interview date, contact name, next steps…"
-          rows={5}
-          className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm placeholder-white/25 outline-none focus:border-primary/50 transition-colors resize-none"
-        />
-        <div className="flex items-center justify-end gap-2 mt-3">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 rounded-xl text-sm text-white/40 hover:text-white transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="px-4 py-2 rounded-xl text-sm bg-primary hover:bg-primary/90 text-white font-medium transition-all disabled:opacity-50"
-          >
-            {saving ? "Saving…" : "Save notes"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function AppCard({ app, onStatusChange, onNotesOpen, onDelete }) {
-  const job = app.jobId;
-  const col = colFor(app.status);
-  const prev = STATUS_ORDER[STATUS_ORDER.indexOf(app.status) - 1];
-  const next = STATUS_ORDER[STATUS_ORDER.indexOf(app.status) + 1];
-  const [menuOpen, setMenuOpen] = useState(false);
-
-  if (!job) return null;
-
-  return (
-    <div className="group bg-white/5 hover:bg-white/[0.07] border border-white/8 rounded-xl p-4 transition-all">
-      <div className="mb-3 pr-6 relative">
-        <h4 className="text-white text-sm font-semibold leading-snug line-clamp-2">
-          {job.title}
-        </h4>
-        <p className="text-white/40 text-xs mt-0.5 truncate">{job.company}</p>
-        <div className="absolute top-0 right-0">
-          <button
-            onClick={() => setMenuOpen((o) => !o)}
-            className="w-6 h-6 rounded-lg flex items-center justify-center text-white/20 hover:text-white/60 hover:bg-white/10 transition-all opacity-0 group-hover:opacity-100"
-          >
-            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-              <circle cx="12" cy="5" r="1.5" />
-              <circle cx="12" cy="12" r="1.5" />
-              <circle cx="12" cy="19" r="1.5" />
-            </svg>
-          </button>
-          {menuOpen && (
-            <div
-              className="absolute right-0 top-7 z-20 w-40 bg-[#111827] border border-white/10 rounded-xl overflow-hidden shadow-xl"
-              onMouseLeave={() => setMenuOpen(false)}
-            >
-              <button
-                onClick={() => {
-                  onNotesOpen(app);
-                  setMenuOpen(false);
-                }}
-                className="w-full text-left px-3 py-2 text-xs text-white/60 hover:bg-white/5 hover:text-white transition-colors flex items-center gap-2"
-              >
-                <svg
-                  className="w-3.5 h-3.5"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                  />
-                </svg>
-                Edit notes
-              </button>
-              {prev && (
-                <button
-                  onClick={() => {
-                    onStatusChange(app._id, prev);
-                    setMenuOpen(false);
-                  }}
-                  className="w-full text-left px-3 py-2 text-xs text-white/60 hover:bg-white/5 hover:text-white transition-colors flex items-center gap-2"
-                >
-                  <svg
-                    className="w-3.5 h-3.5"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M15 19l-7-7 7-7"
-                    />
-                  </svg>
-                  Move to {colFor(prev).label}
-                </button>
-              )}
-              {next && (
-                <button
-                  onClick={() => {
-                    onStatusChange(app._id, next);
-                    setMenuOpen(false);
-                  }}
-                  className="w-full text-left px-3 py-2 text-xs text-white/60 hover:bg-white/5 hover:text-white transition-colors flex items-center gap-2"
-                >
-                  <svg
-                    className="w-3.5 h-3.5"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M9 5l7 7-7 7"
-                    />
-                  </svg>
-                  Move to {colFor(next).label}
-                </button>
-              )}
-              <div className="border-t border-white/5 mt-1" />
-              <button
-                onClick={() => {
-                  onDelete(app._id);
-                  setMenuOpen(false);
-                }}
-                className="w-full text-left px-3 py-2 text-xs text-red-400 hover:bg-red-500/10 transition-colors flex items-center gap-2"
-              >
-                <svg
-                  className="w-3.5 h-3.5"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                  />
-                </svg>
-                Remove
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {job.tags?.length > 0 && (
-        <div className="flex flex-wrap gap-1 mb-3">
-          {job.tags.slice(0, 3).map((tag) => (
-            <span
-              key={tag}
-              className="text-[10px] bg-white/5 text-white/40 px-2 py-0.5 rounded-lg border border-white/5"
-            >
-              {tag}
-            </span>
-          ))}
-        </div>
-      )}
-
-      {app.notes && (
-        <p className="text-white/35 text-xs italic line-clamp-2 mb-3 border-l-2 border-white/10 pl-2">
-          {app.notes}
-        </p>
-      )}
-
-      <div className="flex items-center justify-between mt-auto">
-        <span
-          className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full"
-          style={{ backgroundColor: col.bg, color: col.color }}
+    <div className="col-span-full flex flex-col items-center justify-center py-20 text-center">
+      <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mb-4">
+        <svg
+          className="w-6 h-6 text-white/30"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={1.5}
         >
-          {col.label}
-        </span>
-        <span className="text-white/25 text-[10px]">
-          {timeAgo(app.updatedAt)}
-        </span>
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+          />
+        </svg>
       </div>
-
-      <div className="flex items-center gap-1 mt-3 opacity-0 group-hover:opacity-100 transition-opacity">
-        {prev && (
-          <button
-            onClick={() => onStatusChange(app._id, prev)}
-            className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg bg-white/5 border border-white/8 text-white/40 hover:text-white hover:border-white/15 text-[10px] transition-all"
-          >
-            <svg
-              className="w-3 h-3"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M15 19l-7-7 7-7"
-              />
-            </svg>
-            {colFor(prev).label}
-          </button>
-        )}
-        {next && (
-          <button
-            onClick={() => onStatusChange(app._id, next)}
-            className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg bg-white/5 border border-white/8 text-white/40 hover:text-white hover:border-white/15 text-[10px] transition-all"
-          >
-            {colFor(next).label}
-            <svg
-              className="w-3 h-3"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M9 5l7 7-7 7"
-              />
-            </svg>
-          </button>
-        )}
-      </div>
+      <p className="text-white/50 text-sm mb-1">
+        No jobs found{search ? ` for "${search}"` : ""}.
+      </p>
+      {search && (
+        <button
+          onClick={onClear}
+          className="text-primary text-sm hover:underline mt-1"
+        >
+          Clear search
+        </button>
+      )}
     </div>
   );
 }
 
-function AppRow({ app, onStatusChange, onNotesOpen, onDelete }) {
-  const job = app.jobId;
-  const col = colFor(app.status);
-  if (!job) return null;
-
-  return (
-    <tr className="group border-b border-white/5 hover:bg-white/[0.03] transition-colors">
-      <td className="py-3 px-4">
-        <p className="text-white text-sm font-medium line-clamp-1">
-          {job.title}
-        </p>
-        <p className="text-white/40 text-xs mt-0.5">{job.company}</p>
-      </td>
-      <td className="py-3 px-4 hidden sm:table-cell">
-        <div className="flex flex-wrap gap-1">
-          {(job.tags || []).slice(0, 3).map((t) => (
-            <span
-              key={t}
-              className="text-[10px] bg-white/5 text-white/40 px-2 py-0.5 rounded-lg border border-white/5"
-            >
-              {t}
-            </span>
-          ))}
-        </div>
-      </td>
-      <td className="py-3 px-4">
-        <select
-          value={app.status}
-          onChange={(e) => onStatusChange(app._id, e.target.value)}
-          className="text-xs rounded-lg px-2 py-1 border outline-none cursor-pointer transition-colors"
-          style={{
-            backgroundColor: col.bg,
-            borderColor: `${col.color}44`,
-            color: col.color,
-          }}
-        >
-          {STATUS_ORDER.map((s) => (
-            <option
-              key={s}
-              value={s}
-              style={{ backgroundColor: "#0d1326", color: "#fff" }}
-            >
-              {colFor(s).label}
-            </option>
-          ))}
-        </select>
-      </td>
-      <td className="py-3 px-4 hidden md:table-cell">
-        <p className="text-white/30 text-xs max-w-[160px] truncate">
-          {app.notes || <span className="italic text-white/15">No notes</span>}
-        </p>
-      </td>
-      <td className="py-3 px-4 text-white/25 text-xs whitespace-nowrap hidden sm:table-cell">
-        {timeAgo(app.updatedAt)}
-      </td>
-      <td className="py-3 px-4">
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button
-            onClick={() => onNotesOpen(app)}
-            className="w-7 h-7 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center text-white/40 hover:text-white transition-all"
-          >
-            <svg
-              className="w-3.5 h-3.5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-              />
-            </svg>
-          </button>
-          <button
-            onClick={() => onDelete(app._id)}
-            className="w-7 h-7 rounded-lg bg-white/5 hover:bg-red-500/20 flex items-center justify-center text-white/40 hover:text-red-400 transition-all"
-          >
-            <svg
-              className="w-3.5 h-3.5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-              />
-            </svg>
-          </button>
-        </div>
-      </td>
-    </tr>
-  );
-}
-
-export default function Tracker() {
+function JobFeedShell({ type, label }) {
   const { user, logout } = useAuth();
-  const { applications, loading, changeStatus, saveNotes, removeApplication } =
-    useApplications();
-
-  const [view, setView] = useState("kanban");
-  const [notesApp, setNotesApp] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
+  const [detailJob, setDetailJob] = useState(null);
 
-  // Close user menu on outside click — import useRef at top
-  // (already imported via React)
+  const {
+    jobs,
+    loading,
+    loadingMore,
+    error,
+    hasMore,
+    total,
+    seenIds,
+    newCount,
+    search,
+    setSearch,
+    activeTags,
+    toggleTag,
+    clearTags,
+    loadMore,
+    retry,
+  } = useJobFeed(type);
 
-  const total = applications.length;
-  const stats = COLUMNS.map((col) => ({
-    ...col,
-    count: applications.filter((a) => a.status === col.status).length,
-  }));
+  useEffect(() => {
+    function handler(e) {
+      if (menuRef.current && !menuRef.current.contains(e.target))
+        setMenuOpen(false);
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
   const firstName = user?.email?.split("@")[0] ?? "there";
+  const hour = new Date().getHours();
+  const greeting =
+    hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
   return (
     <div className="min-h-screen bg-bg text-white">
@@ -485,264 +155,291 @@ export default function Tracker() {
           <span className="font-display font-bold text-lg text-white tracking-tight">
             Job<span className="text-primary">Pulse</span>
           </span>
+
+          {/* Desktop nav */}
           <DesktopNav />
-          <div className="flex items-center gap-2">
-            {/* View toggle */}
-            <div className="flex items-center gap-1 bg-white/5 rounded-xl p-1">
-              <button
-                onClick={() => setView("kanban")}
-                title="Kanban"
-                className={`w-8 h-7 rounded-lg flex items-center justify-center transition-all ${view === "kanban" ? "bg-primary/20 text-primary" : "text-white/30 hover:text-white"}`}
-              >
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"
-                  />
-                </svg>
-              </button>
-              <button
-                onClick={() => setView("list")}
-                title="List"
-                className={`w-8 h-7 rounded-lg flex items-center justify-center transition-all ${view === "list" ? "bg-primary/20 text-primary" : "text-white/30 hover:text-white"}`}
-              >
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M4 6h16M4 10h16M4 14h16M4 18h16"
-                  />
-                </svg>
-              </button>
-            </div>
-            {/* User menu */}
-            <div className="relative" ref={menuRef}>
-              <button
-                onClick={() => setMenuOpen((o) => !o)}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 hover:border-white/20 transition-all"
-              >
-                <div className="w-6 h-6 rounded-full bg-primary/30 flex items-center justify-center">
-                  <span className="text-[10px] font-bold text-primary uppercase">
-                    {firstName[0]}
-                  </span>
-                </div>
-                <svg
-                  className={`w-3 h-3 text-white/30 transition-transform ${menuOpen ? "rotate-180" : ""}`}
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M19 9l-7 7-7-7"
-                  />
-                </svg>
-              </button>
-              {menuOpen && (
-                <div className="absolute right-0 top-full mt-2 w-44 bg-[#111827] border border-white/10 rounded-xl overflow-hidden shadow-2xl z-50">
-                  <div className="px-4 py-3 border-b border-white/5">
-                    <p className="text-xs text-white/40">Signed in as</p>
-                    <p className="text-xs text-white/80 truncate mt-0.5">
-                      {user?.email}
-                    </p>
-                  </div>
-                  <button
-                    onClick={logout}
-                    className="w-full text-left px-4 py-2.5 text-sm text-red-400 hover:bg-red-500/10 transition-colors"
-                  >
-                    Sign out
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </header>
 
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8 pb-28 sm:pb-8">
-        <div className="mb-6">
-          <h1 className="font-display text-2xl sm:text-3xl font-bold text-white">
-            Application Tracker
-          </h1>
-          <p className="text-white/40 text-sm mt-1">
-            {total > 0
-              ? `${total} application${total !== 1 ? "s" : ""} tracked`
-              : "Save jobs to start tracking"}
-          </p>
-        </div>
-
-        {/* Stats strip */}
-        {total > 0 && (
-          <div className="grid grid-cols-4 gap-3 mb-8">
-            {stats.map((s) => (
-              <div
-                key={s.status}
-                className="rounded-2xl border p-4 text-center"
-                style={{ backgroundColor: s.bg, borderColor: `${s.color}30` }}
-              >
-                <p
-                  className="text-2xl font-display font-bold"
-                  style={{ color: s.color }}
-                >
-                  {s.count}
-                </p>
-                <p className="text-xs mt-0.5" style={{ color: `${s.color}99` }}>
-                  {s.label}
-                </p>
+          {/* User menu */}
+          <div className="relative" ref={menuRef}>
+            <button
+              onClick={() => setMenuOpen((o) => !o)}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 hover:border-white/20 transition-all"
+            >
+              <div className="w-6 h-6 rounded-full bg-primary/30 flex items-center justify-center">
+                <span className="text-[10px] font-bold text-primary uppercase">
+                  {firstName[0]}
+                </span>
               </div>
-            ))}
-          </div>
-        )}
-
-        {/* Loading */}
-        {loading && (
-          <div className="flex items-center justify-center py-24">
-            <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-          </div>
-        )}
-
-        {/* Empty state */}
-        {!loading && total === 0 && (
-          <div className="flex flex-col items-center justify-center py-24 text-center">
-            <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/8 flex items-center justify-center mb-5">
+              <span className="text-white/60 text-xs hidden sm:block max-w-[120px] truncate">
+                {user?.email}
+              </span>
               <svg
-                className="w-7 h-7 text-white/20"
+                className={`w-3 h-3 text-white/30 transition-transform ${menuOpen ? "rotate-180" : ""}`}
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
-                strokeWidth={1.5}
+                strokeWidth={2}
               >
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"
+                  d="M19 9l-7 7-7-7"
+                />
+              </svg>
+            </button>
+            {menuOpen && (
+              <div className="absolute right-0 top-full mt-2 w-44 bg-[#111827] border border-white/10 rounded-xl overflow-hidden shadow-2xl z-50">
+                <div className="px-4 py-3 border-b border-white/5">
+                  <p className="text-xs text-white/40">Signed in as</p>
+                  <p className="text-xs text-white/80 truncate mt-0.5">
+                    {user?.email}
+                  </p>
+                </div>
+                <button
+                  onClick={logout}
+                  className="w-full text-left px-4 py-2.5 text-sm text-red-400 hover:bg-red-500/10 transition-colors"
+                >
+                  Sign out
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </header>
+
+      {/* Main content */}
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8 pb-28 sm:pb-8">
+        {/* Greeting */}
+        <div className="mb-6">
+          <h1 className="font-display text-2xl sm:text-3xl font-bold text-white">
+            {greeting}, <span className="text-primary">{firstName}</span> 👋
+          </h1>
+          <p className="text-white/40 text-sm mt-1">
+            {total > 0
+              ? `${total.toLocaleString()} ${label.toLowerCase()} jobs available`
+              : `Finding the best ${label.toLowerCase()} roles for you`}
+          </p>
+        </div>
+
+        {/* New jobs banner */}
+        {newCount > 0 && (
+          <div className="mb-6 flex items-center gap-3 bg-primary/10 border border-primary/20 rounded-2xl px-4 py-3">
+            <div className="w-8 h-8 rounded-xl bg-primary/20 flex items-center justify-center flex-shrink-0">
+              <svg
+                className="w-4 h-4 text-primary"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
                 />
               </svg>
             </div>
-            <p className="text-white/50 text-sm mb-1">No applications yet.</p>
-            <p className="text-white/25 text-xs">
-              Save or apply to jobs from the Remote or Contract feed.
-            </p>
+            <div>
+              <p className="text-white text-sm font-medium">
+                {newCount} new {newCount === 1 ? "job" : "jobs"} since your last
+                visit
+              </p>
+              <p className="text-white/40 text-xs mt-0.5">
+                Last checked{" "}
+                {new Date(user.lastCheckedAt).toLocaleDateString("en-GB", {
+                  weekday: "short",
+                  day: "numeric",
+                  month: "short",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </p>
+            </div>
           </div>
         )}
 
-        {/* Kanban */}
-        {!loading && total > 0 && view === "kanban" && (
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            {COLUMNS.map((col) => {
-              const colApps = applications.filter(
-                (a) => a.status === col.status,
-              );
-              return (
-                <div key={col.status} className="flex flex-col">
-                  <div
-                    className="flex items-center justify-between px-3 py-2 rounded-xl mb-3 border"
-                    style={{
-                      backgroundColor: col.bg,
-                      borderColor: `${col.color}30`,
-                    }}
+        {/* Search */}
+        <div className="relative mb-4">
+          <svg
+            className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 pointer-events-none"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2}
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+            />
+          </svg>
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={`Search ${label.toLowerCase()} jobs…`}
+            className="w-full bg-white/5 border border-white/10 rounded-2xl pl-11 pr-10 py-3 text-white text-sm placeholder-white/25 outline-none focus:border-primary/50 transition-colors"
+          />
+          {search && (
+            <button
+              onClick={() => setSearch("")}
+              className="absolute right-4 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors"
+            >
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              </svg>
+            </button>
+          )}
+        </div>
+
+        {/* Tag chips — horizontally scrollable on mobile */}
+        <div className="flex items-center gap-2 mb-8 overflow-x-auto pb-1 scrollbar-hide">
+          {POPULAR_TAGS.map((tag) => (
+            <button
+              key={tag}
+              onClick={() => toggleTag(tag)}
+              className={`
+                flex-shrink-0 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all
+                ${
+                  activeTags.includes(tag)
+                    ? "bg-primary/20 border-primary/40 text-primary"
+                    : "bg-white/5 border-white/8 text-white/50 hover:border-white/15 hover:text-white"
+                }
+              `}
+            >
+              {tag}
+            </button>
+          ))}
+          {activeTags.length > 0 && (
+            <button
+              onClick={clearTags}
+              className="flex-shrink-0 px-3 py-1.5 rounded-xl text-xs text-white/30 hover:text-white/60 transition-colors"
+            >
+              Clear all
+            </button>
+          )}
+        </div>
+
+        {/* Job grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {loading ? (
+            Array.from({ length: 9 }).map((_, i) => <JobSkeleton key={i} />)
+          ) : error ? (
+            <ErrorState onRetry={retry} />
+          ) : jobs.length === 0 ? (
+            <EmptyState search={search} onClear={() => setSearch("")} />
+          ) : (
+            jobs.map((job) => (
+              <JobCard
+                key={job._id}
+                job={job}
+                isSeen={seenIds.has(String(job._id))}
+                onOpenDetail={(j) => setDetailJob(j)}
+              />
+            ))
+          )}
+        </div>
+
+        {/* Load more */}
+        {!loading && !error && hasMore && (
+          <div className="mt-8 flex justify-center">
+            <button
+              onClick={loadMore}
+              disabled={loadingMore}
+              className="flex items-center gap-2 px-6 py-3 rounded-2xl bg-white/5 border border-white/10 text-white/60 hover:text-white hover:border-white/20 text-sm font-medium transition-all disabled:opacity-50"
+            >
+              {loadingMore ? (
+                <>
+                  <svg
+                    className="w-4 h-4 animate-spin"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
                   >
-                    <span
-                      className="text-xs font-semibold"
-                      style={{ color: col.color }}
-                    >
-                      {col.label}
-                    </span>
-                    <span
-                      className="text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center"
-                      style={{
-                        backgroundColor: `${col.color}25`,
-                        color: col.color,
-                      }}
-                    >
-                      {colApps.length}
-                    </span>
-                  </div>
-                  <div className="flex flex-col gap-3">
-                    {colApps.length === 0 ? (
-                      <EmptyColumn label={col.label} />
-                    ) : (
-                      colApps.map((app) => (
-                        <AppCard
-                          key={app._id}
-                          app={app}
-                          onStatusChange={changeStatus}
-                          onNotesOpen={setNotesApp}
-                          onDelete={removeApplication}
-                        />
-                      ))
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                    />
+                  </svg>
+                  Loading…
+                </>
+              ) : (
+                <>
+                  Load more
+                  <span className="text-white/30 text-xs">
+                    ({total - jobs.length} remaining)
+                  </span>
+                </>
+              )}
+            </button>
           </div>
         )}
 
-        {/* List */}
-        {!loading && total > 0 && view === "list" && (
-          <div className="overflow-x-auto rounded-2xl border border-white/8">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-white/8">
-                  <th className="text-left py-3 px-4 text-xs text-white/30 font-semibold uppercase tracking-wider">
-                    Job
-                  </th>
-                  <th className="text-left py-3 px-4 text-xs text-white/30 font-semibold uppercase tracking-wider hidden sm:table-cell">
-                    Tags
-                  </th>
-                  <th className="text-left py-3 px-4 text-xs text-white/30 font-semibold uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th className="text-left py-3 px-4 text-xs text-white/30 font-semibold uppercase tracking-wider hidden md:table-cell">
-                    Notes
-                  </th>
-                  <th className="text-left py-3 px-4 text-xs text-white/30 font-semibold uppercase tracking-wider hidden sm:table-cell">
-                    Updated
-                  </th>
-                  <th className="py-3 px-4" />
-                </tr>
-              </thead>
-              <tbody>
-                {applications.map((app) => (
-                  <AppRow
-                    key={app._id}
-                    app={app}
-                    onStatusChange={changeStatus}
-                    onNotesOpen={setNotesApp}
-                    onDelete={removeApplication}
-                  />
-                ))}
-              </tbody>
-            </table>
-          </div>
+        {!loading && !error && jobs.length > 0 && !hasMore && (
+          <p className="text-center text-white/20 text-xs mt-10">
+            You've seen all {total.toLocaleString()} jobs
+          </p>
         )}
       </main>
 
-      {notesApp && (
-        <NotesModal
-          application={notesApp}
-          onSave={saveNotes}
-          onClose={() => setNotesApp(null)}
-        />
-      )}
+      <JobDetailDrawer job={detailJob} onClose={() => setDetailJob(null)} />
 
       <BottomNav />
     </div>
   );
+}
+
+// Desktop nav — reads current route to highlight active tab
+function DesktopNav() {
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const tabs = [
+    { label: "Remote", path: "/" },
+    { label: "Contract", path: "/contract" },
+    { label: "Tracker", path: "/tracker" },
+  ];
+  return (
+    <nav className="hidden sm:flex items-center gap-1 bg-white/5 rounded-xl p-1">
+      {tabs.map((tab) => (
+        <button
+          key={tab.path}
+          onClick={() => tab.path !== "/tracker" && navigate(tab.path)}
+          disabled={tab.path === "/tracker"}
+          className={`
+            px-4 py-1.5 rounded-lg text-sm font-medium transition-colors
+            ${
+              pathname === tab.path
+                ? "bg-primary/20 text-primary"
+                : tab.path === "/tracker"
+                  ? "text-white/25 cursor-not-allowed"
+                  : "text-white/50 hover:text-white"
+            }
+          `}
+        >
+          {tab.label}
+        </button>
+      ))}
+    </nav>
+  );
+}
+
+// Export two named page components using the same shell
+export default function RemoteDashboard() {
+  return <JobFeedShell type="remote" label="Remote" />;
+}
+
+export function ContractDashboard() {
+  return <JobFeedShell type="contract" label="Contract" />;
 }
