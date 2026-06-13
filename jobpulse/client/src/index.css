@@ -61,6 +61,43 @@
   margin-bottom: 0.25rem;
 }
 
+/* Better glass card hover depth */
+.glass-card {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* Consistent focus ring across inputs/buttons */
+:focus-visible {
+  outline: 2px solid rgba(108, 99, 255, 0.6);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+/* Prevent iOS tap highlight */
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Scrollbar styling for Webkit — thin, matches bg */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
 /* Toast animation */
 @keyframes slide-up {
   from {
@@ -75,4 +112,26 @@
 
 .animate-slide-up {
   animation: slide-up 0.2s ease-out both;
+}
+
+@keyframes toast-in {
+  from {
+    transform: translateY(8px) scale(0.95);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes tab-fade {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }

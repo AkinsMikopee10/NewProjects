@@ -12,25 +12,31 @@ import {
   deleteApplication as apiDelete,
 } from "../api/applications";
 import { useAuth } from "./AuthContext";
+import { useToast } from "./ToastContext";
 
 const ApplicationsContext = createContext(null);
 
 export function ApplicationsProvider({ children }) {
   const { user } = useAuth();
+  const { toast } = useToast();
+
   const [applications, setApplications] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [synced, setSynced] = useState(false); // has first fetch completed?
 
   // ── Initial load ───────────────────────────────────────────────────────────
   const load = useCallback(async () => {
     if (!user) return;
     setLoading(true);
+    setLoadError(false);
     try {
       const data = await fetchApplications();
       setApplications(data);
       setSynced(true);
     } catch (err) {
       console.error("[ApplicationsContext] load failed", err);
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -42,7 +48,7 @@ export function ApplicationsProvider({ children }) {
       setApplications([]);
       setSynced(false);
     }
-  }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [user]);
 
   // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -55,8 +61,7 @@ export function ApplicationsProvider({ children }) {
   }
 
   function isSaved(jobId) {
-    const a = getByJobId(jobId);
-    return !!a;
+    return !!getByJobId(jobId);
   }
   function isApplied(jobId) {
     const a = getByJobId(jobId);
@@ -87,10 +92,12 @@ export function ApplicationsProvider({ children }) {
       setApplications((prev) =>
         prev.map((a) => (a._id === optimistic._id ? created : a)),
       );
+      toast({ message: "Job saved", type: "save" });
       return created;
     } catch (err) {
       // Roll back
       setApplications((prev) => prev.filter((a) => a._id !== optimistic._id));
+      toast({ message: "Failed to save job", type: "error" });
       throw err;
     }
   }
@@ -104,13 +111,14 @@ export function ApplicationsProvider({ children }) {
     setApplications((prev) => prev.filter((a) => a._id !== existing._id));
     try {
       await apiDelete(existing._id);
+      toast({ message: "Job removed", type: "success" });
     } catch {
       setApplications((prev) => [existing, ...prev]); // rollback
+      toast({ message: "Failed to remove job", type: "error" });
     }
   }
 
   // ── Idempotent apply ───────────────────────────────────────────────────────
-  // This is the key Day 13–14 requirement:
   // If already saved → PATCH to applied
   // If not tracked yet → create with status applied
   // Never creates duplicates
@@ -135,12 +143,14 @@ export function ApplicationsProvider({ children }) {
         setApplications((prev) =>
           prev.map((a) => (a._id === existing._id ? result : a)),
         );
+        toast({ message: "Marked as applied", type: "apply" });
         return result;
       } catch {
         // Rollback
         setApplications((prev) =>
           prev.map((a) => (a._id === existing._id ? existing : a)),
         );
+        toast({ message: "Failed to mark as applied", type: "error" });
         throw new Error("Apply failed");
       }
     } else {
@@ -160,9 +170,11 @@ export function ApplicationsProvider({ children }) {
         setApplications((prev) =>
           prev.map((a) => (a._id === optimistic._id ? created : a)),
         );
+        toast({ message: "Marked as applied", type: "apply" });
         return created;
       } catch {
         setApplications((prev) => prev.filter((a) => a._id !== optimistic._id));
+        toast({ message: "Failed to mark as applied", type: "error" });
         throw new Error("Apply failed");
       }
     }
@@ -187,10 +199,18 @@ export function ApplicationsProvider({ children }) {
       setApplications((prev) =>
         prev.map((a) => (a._id === applicationId ? result : a)),
       );
+      const col = {
+        saved: "Saved",
+        applied: "Applied",
+        interview: "Interview",
+        rejected: "Rejected",
+      };
+      toast({ message: `Moved to ${col[status]}`, type: "status" });
     } catch {
       setApplications((prev) =>
         prev.map((a) => (a._id === applicationId ? existing : a)),
       );
+      toast({ message: "Failed to update status", type: "error" });
     }
   }
 
@@ -208,6 +228,7 @@ export function ApplicationsProvider({ children }) {
       setApplications((prev) =>
         prev.map((a) => (a._id === applicationId ? existing : a)),
       );
+      toast({ message: "Failed to save notes", type: "error" });
     }
   }
 
@@ -217,8 +238,10 @@ export function ApplicationsProvider({ children }) {
     setApplications((prev) => prev.filter((a) => a._id !== applicationId));
     try {
       await apiDelete(applicationId);
+      toast({ message: "Application removed", type: "success" });
     } catch {
       setApplications((prev) => [existing, ...prev]);
+      toast({ message: "Failed to remove application", type: "error" });
     }
   }
 
@@ -228,6 +251,7 @@ export function ApplicationsProvider({ children }) {
         applications,
         loading,
         synced,
+        loadError,
         reload: load,
         getByJobId,
         isSaved,

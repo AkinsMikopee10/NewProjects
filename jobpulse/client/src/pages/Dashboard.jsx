@@ -345,6 +345,7 @@ function JobFeedShell({ type, label }) {
                 job={job}
                 isSeen={seenIds.has(String(job._id))}
                 onOpenDetail={(j) => setDetailJob(j)}
+                query={search}
               />
             ))
           )}

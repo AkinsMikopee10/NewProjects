@@ -3,6 +3,7 @@ import { useAuth } from "../context/AuthContext";
 import { useApplications } from "../context/ApplicationsContext";
 import { incrementView, incrementApply } from "../api/jobs";
 import { markSeen } from "../api/meta";
+import Highlight from "./Highlight";
 
 function timeAgo(date) {
   const s = Math.floor((Date.now() - new Date(date)) / 1000);
@@ -54,7 +55,7 @@ function ApplyToast({ onConfirm, onUndo, onDismiss }) {
   );
 }
 
-const JobCard = ({ job, isSeen = false, onOpenDetail }) => {
+const JobCard = ({ job, isSeen = false, onOpenDetail, query = "" }) => {
   const { user } = useAuth();
   const { isSaved, isApplied, saveJob, unsaveJob, applyJob } =
     useApplications();
@@ -167,7 +168,7 @@ const JobCard = ({ job, isSeen = false, onOpenDetail }) => {
 
         {/* Title + company */}
         <h3 className="font-display font-bold text-white text-base leading-snug mb-0.5 pr-12 group-hover:text-primary transition-colors line-clamp-2">
-          {job.title}
+          <Highlight text={job.title} query={query} />
         </h3>
         <p className="text-white/50 text-sm mb-3 truncate">{job.company}</p>
 

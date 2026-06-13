@@ -67,6 +67,15 @@ function isStale(app) {
   return days >= 7;
 }
 
+// Fades content in when key changes
+function FadeIn({ children, id }) {
+  return (
+    <div key={id} style={{ animation: "tab-fade 0.18s ease-out" }}>
+      {children}
+    </div>
+  );
+}
+
 // ─── Skeletons ────────────────────────────────────────────────────────────────
 
 function AppCardSkeleton() {
@@ -583,8 +592,15 @@ function EmptyColumn({ label }) {
 
 export default function Tracker() {
   const { user, logout } = useAuth();
-  const { applications, loading, changeStatus, saveNotes, removeApplication } =
-    useApplications();
+  const {
+    applications,
+    loading,
+    loadError,
+    reload,
+    changeStatus,
+    saveNotes,
+    removeApplication,
+  } = useApplications();
 
   // Days 15–16: active tab filter
   const [activeTab, setActiveTab] = useState("all");
@@ -813,7 +829,41 @@ export default function Tracker() {
           </div>
         )}
 
-        {/* Loading skeletons (Days 15–16) */}
+        {/* Loading skeletons */}
+
+        {/* Error state */}
+        {!loading && loadError && (
+          <div className="flex flex-col items-center justify-center py-24 text-center">
+            <div className="w-14 h-14 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center mb-4">
+              <svg
+                className="w-6 h-6 text-red-400"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={1.5}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"
+                />
+              </svg>
+            </div>
+            <p className="text-white/60 text-sm mb-1">
+              Couldn't load your applications.
+            </p>
+            <p className="text-white/30 text-xs mb-4">
+              Check your connection and try again.
+            </p>
+            <button
+              onClick={reload}
+              className="px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-white/60 hover:text-white hover:border-white/20 text-sm transition-all"
+            >
+              Try again
+            </button>
+          </div>
+        )}
+
         {loading && view === "kanban" && (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             {COLUMNS.map((col) => (
@@ -885,95 +935,99 @@ export default function Tracker() {
 
         {/* ── Kanban view ───────────────────────────────────────────────────── */}
         {!loading && filtered.length > 0 && view === "kanban" && (
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            {(activeTab === "all"
-              ? COLUMNS
-              : COLUMNS.filter((c) => c.status === activeTab)
-            ).map((col) => {
-              const colApps = filtered.filter((a) => a.status === col.status);
-              return (
-                <div key={col.status} className="flex flex-col">
-                  <div
-                    className="flex items-center justify-between px-3 py-2 rounded-xl mb-3 border"
-                    style={{
-                      backgroundColor: col.bg,
-                      borderColor: `${col.color}30`,
-                    }}
-                  >
-                    <span
-                      className="text-xs font-semibold"
-                      style={{ color: col.color }}
-                    >
-                      {col.label}
-                    </span>
-                    <span
-                      className="text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center"
+          <FadeIn id={activeTab + "kanban"}>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              {(activeTab === "all"
+                ? COLUMNS
+                : COLUMNS.filter((c) => c.status === activeTab)
+              ).map((col) => {
+                const colApps = filtered.filter((a) => a.status === col.status);
+                return (
+                  <div key={col.status} className="flex flex-col">
+                    <div
+                      className="flex items-center justify-between px-3 py-2 rounded-xl mb-3 border"
                       style={{
-                        backgroundColor: `${col.color}25`,
-                        color: col.color,
+                        backgroundColor: col.bg,
+                        borderColor: `${col.color}30`,
                       }}
                     >
-                      {colApps.length}
-                    </span>
+                      <span
+                        className="text-xs font-semibold"
+                        style={{ color: col.color }}
+                      >
+                        {col.label}
+                      </span>
+                      <span
+                        className="text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center"
+                        style={{
+                          backgroundColor: `${col.color}25`,
+                          color: col.color,
+                        }}
+                      >
+                        {colApps.length}
+                      </span>
+                    </div>
+                    <div className="flex flex-col gap-3">
+                      {colApps.length === 0 ? (
+                        <EmptyColumn label={col.label} />
+                      ) : (
+                        colApps.map((app) => (
+                          <AppCard
+                            key={app._id}
+                            app={app}
+                            onStatusChange={changeStatus}
+                            onSaveNotes={saveNotes}
+                            onDelete={removeApplication}
+                          />
+                        ))
+                      )}
+                    </div>
                   </div>
-                  <div className="flex flex-col gap-3">
-                    {colApps.length === 0 ? (
-                      <EmptyColumn label={col.label} />
-                    ) : (
-                      colApps.map((app) => (
-                        <AppCard
-                          key={app._id}
-                          app={app}
-                          onStatusChange={changeStatus}
-                          onSaveNotes={saveNotes}
-                          onDelete={removeApplication}
-                        />
-                      ))
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          </FadeIn>
         )}
 
         {/* ── List view ──────────────────────────────────────────────────────── */}
         {!loading && filtered.length > 0 && view === "list" && (
-          <div className="overflow-x-auto rounded-2xl border border-white/8">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-white/8">
-                  <th className="text-left py-3 px-4 text-xs text-white/30 font-semibold uppercase tracking-wider">
-                    Job
-                  </th>
-                  <th className="text-left py-3 px-4 text-xs text-white/30 font-semibold uppercase tracking-wider hidden sm:table-cell">
-                    Tags
-                  </th>
-                  <th className="text-left py-3 px-4 text-xs text-white/30 font-semibold uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th className="text-left py-3 px-4 text-xs text-white/30 font-semibold uppercase tracking-wider hidden md:table-cell">
-                    Notes
-                  </th>
-                  <th className="text-left py-3 px-4 text-xs text-white/30 font-semibold uppercase tracking-wider hidden sm:table-cell">
-                    Applied
-                  </th>
-                  <th className="py-3 px-4" />
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((app) => (
-                  <AppRow
-                    key={app._id}
-                    app={app}
-                    onStatusChange={changeStatus}
-                    onSaveNotes={saveNotes}
-                    onDelete={removeApplication}
-                  />
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <FadeIn id={activeTab + "list"}>
+            <div className="overflow-x-auto rounded-2xl border border-white/8">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-white/8">
+                    <th className="text-left py-3 px-4 text-xs text-white/30 font-semibold uppercase tracking-wider">
+                      Job
+                    </th>
+                    <th className="text-left py-3 px-4 text-xs text-white/30 font-semibold uppercase tracking-wider hidden sm:table-cell">
+                      Tags
+                    </th>
+                    <th className="text-left py-3 px-4 text-xs text-white/30 font-semibold uppercase tracking-wider">
+                      Status
+                    </th>
+                    <th className="text-left py-3 px-4 text-xs text-white/30 font-semibold uppercase tracking-wider hidden md:table-cell">
+                      Notes
+                    </th>
+                    <th className="text-left py-3 px-4 text-xs text-white/30 font-semibold uppercase tracking-wider hidden sm:table-cell">
+                      Applied
+                    </th>
+                    <th className="py-3 px-4" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((app) => (
+                    <AppRow
+                      key={app._id}
+                      app={app}
+                      onStatusChange={changeStatus}
+                      onSaveNotes={saveNotes}
+                      onDelete={removeApplication}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </FadeIn>
         )}
       </main>
 
